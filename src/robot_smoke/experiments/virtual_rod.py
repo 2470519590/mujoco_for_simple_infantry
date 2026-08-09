@@ -759,7 +759,12 @@ def _run_virtual_rod_test(
         right_leg = _compute_virtual_leg_state(mujoco, model, data, "right")
         if jump_test and not jump_started:
             if forward_jump_test:
-                if _is_speed_profile_cruise(speed_profile, task_time_s):
+                theta_stable_for_jump = (
+                    final_lqr_state is not None
+                    and abs(final_lqr_state.theta) < 0.12
+                    and abs(final_lqr_state.theta_rate) < 0.8
+                )
+                if _is_speed_profile_cruise(speed_profile, task_time_s) and task_time_s >= 1.05 and theta_stable_for_jump:
                     jump_started = True
                     active_jump_time_s = task_time_s
                     jump_extension_start_time = None
@@ -769,13 +774,14 @@ def _run_virtual_rod_test(
                 jump_extension_start_time = None
         average_leg_length = 0.5 * (left_leg.length + right_leg.length)
         jump_crouch_ready = average_leg_length <= jump_crouch_leg_length + 0.003
+        jump_crouch_timeout = jump_started and task_time_s >= active_jump_time_s + 0.10
         if (
             jump_test
             and jump_started
             and jump_extension_start_time is None
             and not was_airborne
             and landing_phase == "ground"
-            and (rl_training_takeoff_control or jump_crouch_ready)
+            and (rl_training_takeoff_control or jump_crouch_ready or jump_crouch_timeout)
         ):
             jump_extension_start_time = task_time_s
         jump_extension_active = (
