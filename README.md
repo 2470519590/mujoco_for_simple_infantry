@@ -19,7 +19,7 @@
 下面命令默认在 Windows PowerShell 中运行。项目路径假设为：
 
 ```powershell
-E:\STM32_PROJ\RL_training
+E:\mujoco_py_lqr
 ```
 
 ### 2.1 安装 Miniconda
@@ -111,7 +111,7 @@ pip install --upgrade mujoco
 进入项目目录：
 
 ```powershell
-cd E:\STM32_PROJ\RL_training
+cd E:\mujoco_py_lqr
 ```
 
 先确认脚本能显示帮助：
