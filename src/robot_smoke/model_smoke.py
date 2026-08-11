@@ -1,7 +1,7 @@
-"""MuJoCo model and low-level actuator smoke checks.
+"""MuJoCo 模型与底层执行器 smoke 检查。
 
-This module verifies that the model loads, exposes the expected low-level
-semantics, and remains finite under small local smoke controllers.
+本模块验证模型可以加载、暴露预期底层语义，并能在小型本地 smoke 控制器下
+保持数值有限。
 """
 
 from __future__ import annotations

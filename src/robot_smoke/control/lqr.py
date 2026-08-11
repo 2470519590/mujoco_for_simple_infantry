@@ -1,4 +1,4 @@
-"""LQR state and math helpers."""
+"""LQR 状态构造与数学辅助函数。"""
 
 from __future__ import annotations
 

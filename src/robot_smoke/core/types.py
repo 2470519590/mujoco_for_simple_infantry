@@ -1,4 +1,4 @@
-"""Data containers used by the robot smoke checks."""
+"""机器人 smoke 检查使用的数据容器。"""
 
 from __future__ import annotations
 

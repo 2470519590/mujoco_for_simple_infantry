@@ -1,4 +1,4 @@
-"""Free-base local input-effect measurement for T and Tp."""
+"""自由基座下 T 与 Tp 局部输入效应测量。"""
 
 from __future__ import annotations
 

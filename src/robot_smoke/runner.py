@@ -1,4 +1,4 @@
-"""Top-level smoke runner orchestration."""
+"""顶层 smoke 运行编排。"""
 
 from __future__ import annotations
 
@@ -44,10 +44,10 @@ from .experiments.equilibrium import (
 )
 from .experiments.fivebar_checks import _run_fivebar_jacobian_check, _run_fivebar_kinematics_check
 from .experiments.fl_tests import _run_fl_channel_test, _run_fl_pulse_test
+from .experiments.manual_drive import ManualDriveInput
 from .control.lqr_design import _compute_lqr_state, _design_lqr_gain
 from .control.lqr import lqr_state_vector as _lqr_state_vector
 from .control.length_schedule import LengthSchedule, load_length_schedule
-from .control.rl_interface import RL_CONTROLLER_MODES
 from .control.ik import _branch_aware_ik_targets
 from .control.vmc import _drive_joint_position_ctrl
 from .control.turning import turn_rate_magnitude
@@ -287,7 +287,7 @@ def _print_low_length_stage_diagnostics(history) -> None:
 def run_smoke(config: RunConfig) -> int:
     mujoco = _load_mujoco()
     runtime_controls = runtime_control_config(config)
-    if config.flight_test or config.slope_roll_turn_test:
+    if config.flight_test:
         model = mujoco.MjModel.from_xml_string(_flight_test_model_xml(Path(config.model_path)))
     elif config.roll_test:
         model = mujoco.MjModel.from_xml_string(_roll_test_model_xml(Path(config.model_path)))
@@ -346,22 +346,13 @@ def run_smoke(config: RunConfig) -> int:
             "flight_detection: airborne when both wheel normal forces are below "
             f"{float(config.flight_airborne_force_threshold):.6g} N"
         )
-    if config.slope_roll_turn_test:
-        print(
-            "slope_roll_turn_test: flight-ramp scene; medium forward until "
-            f"t={float(config.slope_roll_turn_start_time):.3g} s, hold dx_ref=0 for 1 s, then low yaw-rate turn"
-        )
     if config.jump_test:
         print(
             "jump_test: stand at nominal leg length, crouch to 0.18 m at 1.0 s through VMC, "
             "extend after measured crouch completion; flight detection remains enabled"
         )
-    if config.forward_jump_test is not None:
-        print(
-            "forward_jump_test: "
-            f"speed={config.forward_jump_test}, trigger during cruise when |theta_left/right| < 3 deg; "
-            "then reuse jump crouch/extend/landing logic"
-        )
+    if config.manual_drive:
+        print("manual_drive: medium speed; arrow up/down forward/backward, arrow left/right yaw; close viewer to exit")
     print(
         f"roll_control: reference={runtime_controls.roll_reference:.6g} rad, "
         f"force_kp={runtime_controls.roll_force_kp:.6g} N/rad"
@@ -652,7 +643,18 @@ def run_smoke(config: RunConfig) -> int:
         print(f"  final_base_height: {constraint_result.final_base_height:.6g}")
 
     if config.virtual_rod_test:
-        viewer_observer = MujocoViewerObserver(mujoco, model, config.realtime) if config.visualize else None
+        manual_drive_input = ManualDriveInput() if config.manual_drive else None
+        viewer_observer = (
+            MujocoViewerObserver(
+                mujoco,
+                model,
+                config.realtime,
+                key_callback=manual_drive_input.key_callback if manual_drive_input is not None else None,
+                overlay_provider=manual_drive_input.overlay_text if manual_drive_input is not None else None,
+            )
+            if config.visualize
+            else None
+        )
         rollout_steps = config.virtual_rod_steps
         if viewer_observer is not None:
             print("config.visualize: opening MuJoCo viewer for the same virtual-rod rollout")
@@ -704,8 +706,7 @@ def run_smoke(config: RunConfig) -> int:
                 turn_direction=config.turn_direction,
                 turn_speed=config.turn_speed,
                 turn_test=config.turn_test,
-                slope_roll_turn_test=bool(config.slope_roll_turn_test),
-                slope_roll_turn_start_time=float(config.slope_roll_turn_start_time),
+                manual_drive_input=manual_drive_input,
                 leg_sync_kp=config.leg_sync_kp,
                 leg_sync_kd=config.leg_sync_kd,
                 yaw_turn_kp=config.yaw_turn_kp,
@@ -715,7 +716,6 @@ def run_smoke(config: RunConfig) -> int:
                 leg_length_sine_test=bool(config.leg_length_sine_test),
                 leg_length_sine_period=float(config.leg_length_sine_period),
                 jump_test=bool(config.jump_test),
-                forward_jump_test=config.forward_jump_test is not None,
                 branch_guard_enabled=bool(config.leg_branch_guard_enabled),
                 minimum_leg_length=float(config.minimum_leg_length),
                 maximum_leg_length=float(config.maximum_leg_length),
@@ -771,11 +771,6 @@ def run_smoke(config: RunConfig) -> int:
             print("  config.lqr_k: fallback only when schedule is disabled")
         if virtual_result.final_lqr_state is not None:
             lqr_state = virtual_result.final_lqr_state
-            print(f"  config.rl_controller_mode: {config.rl_controller_mode}")
-            print(f"  config.rl_residual_t_limit: {config.rl_residual_t_limit:.6g}")
-            print(f"  config.rl_residual_tp_limit: {config.rl_residual_tp_limit:.6g}")
-            print(f"  config.rl_residual_length_force_limit: {config.rl_residual_length_force_limit:.6g}")
-            print(f"  config.rl_residual_leg_length_limit: {config.rl_residual_leg_length_limit:.6g}")
             print(f"  config.lqr_gain_scale: {config.lqr_gain_scale:.6g}")
             print(f"  config.lqr_x_reference: {config.lqr_x_reference:.6g}")
             print(f"  config.lqr_x_source: {config.lqr_x_source}")
@@ -884,7 +879,6 @@ def run_smoke(config: RunConfig) -> int:
                 config.leg_length_sine_test
                 or config.roll_test
                 or config.flight_test
-                or config.slope_roll_turn_test
                 or config.jump_test
             ):
                 behavior_passed = True
@@ -892,8 +886,6 @@ def run_smoke(config: RunConfig) -> int:
                     diagnostic_name = "jump_test"
                 elif config.flight_test:
                     diagnostic_name = "flight_test"
-                elif config.slope_roll_turn_test:
-                    diagnostic_name = "slope_roll_turn_test"
                 elif config.leg_length_sine_test:
                     diagnostic_name = "dynamic_length_test"
                 else:
@@ -999,29 +991,9 @@ def main(argv: list[str] | None = None) -> int:
         args.flight_detection_enabled = True
         if args.visualize_seconds is None:
             args.visualize_seconds = 10.0
-    if args.slope_roll_turn_test:
-        args.lqr_true_equilibrium = True
-        args.speed_profile = "medium"
-        args.turn_test = True
-        args.turn_speed = "low"
-        args.turn_direction = None
-        args.impact_level = None
-        args.flight_detection_enabled = False
-        if args.visualize_seconds is None:
-            args.visualize_seconds = 10.0
     if args.jump_test:
         args.lqr_true_equilibrium = True
         args.speed_profile = None
-        args.turn_test = False
-        args.turn_direction = None
-        args.impact_level = None
-        args.flight_detection_enabled = True
-        if args.visualize_seconds is None:
-            args.visualize_seconds = 10.0
-    if args.forward_jump_test is not None:
-        args.lqr_true_equilibrium = True
-        args.jump_test = True
-        args.speed_profile = args.forward_jump_test
         args.turn_test = False
         args.turn_direction = None
         args.impact_level = None
@@ -1044,13 +1016,22 @@ def main(argv: list[str] | None = None) -> int:
         args.leg_length_sine_test = True
         if args.visualize_seconds is None:
             args.visualize_seconds = 10.0
-    if args.turn_drive_test is not None:
-        args.turn_test = True
-        args.speed_profile = args.turn_drive_test
-        args.turn_speed = {"low": "low", "high": "medium"}[args.turn_drive_test]
+    if args.manual_drive:
+        args.lqr_true_equilibrium = True
+        args.visualize = True
+        args.speed_profile = None
+        args.turn_test = False
+        args.turn_direction = None
+        args.impact_level = None
     if args.initial_leg_length is None:
         args.initial_leg_length = args.leg_length
-    if args.lqr_true_equilibrium or args.leg_height_test or args.turn_test or args.turn_direction is not None:
+    if (
+        args.lqr_true_equilibrium
+        or args.leg_height_test
+        or args.turn_test
+        or args.turn_direction is not None
+        or args.manual_drive
+    ):
         args.virtual_rod_test = True
         target_leg_length = float(args.initial_leg_length)
         if args.left_rod_length is None:
@@ -1109,8 +1090,7 @@ def main(argv: list[str] | None = None) -> int:
         args.lqr_test = True
         args.lqr_auto_design = False
         args.use_locked_equilibrium = True
-        if args.turn_drive_test is None and not args.slope_roll_turn_test:
-            args.speed_profile = None
+        args.speed_profile = None
         args.impact_level = None
         if args.turn_test:
             args.turn_direction = None
@@ -1171,13 +1151,13 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--visualize-seconds must be positive")
     if args.startup_ramp_seconds < 0.0:
         parser.error("--startup-ramp-seconds must be non-negative")
-    if args.slope_roll_turn_start_time < 0.0:
-        parser.error("--slope-roll-turn-start-time must be non-negative")
     if args.initial_leg_length <= 0.0:
         parser.error("--initial-leg-length must be positive")
     if args.virtual_rod_test or args.lqr_test:
         startup_steps = int(math.ceil(float(args.startup_ramp_seconds) / 0.001))
-        if args.visualize_seconds is not None:
+        if args.manual_drive and args.visualize_seconds is None:
+            args.virtual_rod_steps = 1_000_000_000
+        elif args.visualize_seconds is not None:
             args.virtual_rod_steps = int(math.ceil((args.visualize_seconds + args.startup_ramp_seconds) / 0.001))
         else:
             args.virtual_rod_steps += startup_steps
@@ -1241,15 +1221,6 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--lqr-output-lowpass-hz must be non-negative")
     if args.wheel_ctrl_deadzone < 0.0:
         parser.error("--wheel-ctrl-deadzone must be non-negative")
-    if args.rl_controller_mode not in RL_CONTROLLER_MODES:
-        parser.error(f"--rl-controller-mode must be one of: {', '.join(RL_CONTROLLER_MODES)}")
-    if min(
-        args.rl_residual_t_limit,
-        args.rl_residual_tp_limit,
-        args.rl_residual_length_force_limit,
-        args.rl_residual_leg_length_limit,
-    ) < 0.0:
-        parser.error("RL residual limits must be non-negative")
     if min(
         args.lqr_t_limit,
         lqr_tp_limit,

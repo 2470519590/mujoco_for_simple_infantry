@@ -1,4 +1,4 @@
-﻿"""Five-bar diagnostic command helpers."""
+"""五连杆诊断命令辅助函数。"""
 
 from __future__ import annotations
 

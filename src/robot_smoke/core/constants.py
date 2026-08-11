@@ -1,4 +1,4 @@
-"""Shared constants for the MuJoCo smoke scripts."""
+"""MuJoCo smoke 脚本共享常量。"""
 
 from __future__ import annotations
 

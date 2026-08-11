@@ -1,4 +1,4 @@
-"""YAML-backed runtime configuration for local smoke experiments."""
+"""由 YAML 支持的本地 smoke 实验运行配置。"""
 
 from __future__ import annotations
 
@@ -26,11 +26,6 @@ class RuntimeControlConfig:
     yaw_turn_derivative_lowpass_hz: float
     roll_reference: float
     roll_force_kp: float
-    rl_controller_mode: str
-    rl_residual_t_limit: float
-    rl_residual_tp_limit: float
-    rl_residual_length_force_limit: float
-    rl_residual_leg_length_limit: float
 
 
 class RunConfig:
@@ -55,11 +50,6 @@ def runtime_control_config(config: RunConfig) -> RuntimeControlConfig:
         yaw_turn_derivative_lowpass_hz=float(config.yaw_turn_derivative_lowpass_hz),
         roll_reference=float(config.roll_reference),
         roll_force_kp=float(config.roll_force_kp),
-        rl_controller_mode=str(config.rl_controller_mode),
-        rl_residual_t_limit=float(config.rl_residual_t_limit),
-        rl_residual_tp_limit=float(config.rl_residual_tp_limit),
-        rl_residual_length_force_limit=float(config.rl_residual_length_force_limit),
-        rl_residual_leg_length_limit=float(config.rl_residual_leg_length_limit),
     )
 
 

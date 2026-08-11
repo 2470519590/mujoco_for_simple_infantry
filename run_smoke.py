@@ -1,4 +1,4 @@
-"""Run the local MuJoCo physical-semantics smoke check."""
+"""运行本地 MuJoCo 物理语义 smoke 检查。"""
 
 from src.robot_smoke.runner import main
 

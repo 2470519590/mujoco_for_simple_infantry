@@ -1,4 +1,4 @@
-"""Small MuJoCo helper functions shared by smoke modules."""
+"""smoke 模块共享的小型 MuJoCo 辅助函数。"""
 
 from __future__ import annotations
 

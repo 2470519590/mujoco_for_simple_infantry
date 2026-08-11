@@ -1,4 +1,4 @@
-﻿"""Mechanical diagnostics and static operating-point helpers."""
+"""力学诊断与静态工作点辅助函数。"""
 
 from __future__ import annotations
 

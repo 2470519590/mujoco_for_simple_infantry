@@ -1,4 +1,4 @@
-"""Article-style yaw-rate PD and wheel-torque allocation."""
+"""按论文结构实现的 yaw 角速度 PD 与轮端力矩分配。"""
 
 from __future__ import annotations
 

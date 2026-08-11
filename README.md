@@ -1,257 +1,311 @@
-# MuJoCo 轮腿机器人实验脚本
+# MuJoCo 轮腿机器人电脑仿真
 
-本仓库当前处于 MuJoCo 本地实验阶段，目标是先把模型物理语义、五连杆 VMC、腿长控制、平衡 LQR、转向和基础运动测试跑清楚。底层物理问题不能交给 LQR、强化学习或参数硬调来掩盖。
+本仓库是轮腿机器人 MuJoCo 电脑仿真项目，当前正式入口为 `run_smoke.py`。主要内容包括模型加载、五连杆运动学、VMC、腿长控制、LQR 平衡、速度跟踪、转向、冲击和离地检测。
 
-所有“是否站稳、是否摔倒、是否动作合理”的结论，以 MuJoCo viewer 人工观察为准；曲线和数据只用于定位通道、符号、尺度、饱和和接触问题。
+控制系统参考原论文 [ref\j.cnki.xk.2023.2533.pdf](ref\j.cnki.xk.2023.2533.pdf) 
 
-## 主要文件
+建议先完成环境配置和基础可视化检查，再阅读 [docs/CONTROL_THEORY.md](docs/CONTROL_THEORY.md)。
 
-- `assets/biped_wheel_leg.xml`：MuJoCo 轮腿模型。
-- `run_smoke.py`：本地 smoke 和可视化测试入口。
-- `config/smoke.yaml`：当前主要参数配置。
-- `config/length_schedule.yaml`：腿长调度表，包含不同腿长下的 `F_l0 / X0 / U0 / K`。
-- `src/robot_smoke/`：模型、控制、实验和绘图代码。
-- `docs/CONTROL_THEORY.md`：当前有效控制公式和物理语义。
-- `tasks/CONTROL_FRAMEWORK.md`：同一控制框架下的实验记录。
-- `RL说明.md`：Residual RL Env、任务清单、PPO 训练和本地验证命令。
-- `run_residual_env_smoke.py`：Residual RL Env smoke / 可视化 / 零残差对照入口。
-- `run_train_residual_ppo.py`：最小 Stable-Baselines3 PPO 训练入口，输出默认写入忽略目录 `runs/`。
-- `run_residual_policy_eval.py`：加载 PPO `.zip` 策略后的 headless / viewer 评估入口。
-- `run_export_residual_policy_onnx.py`：把 PPO `.zip` residual actor 导出为 ONNX 的入口。
+## 1. 入口梳理
 
-## 环境
+- `run_smoke.py`：正式运行入口，平衡、速度、转向、冲击、离地、跳跃都从这里进。
+- `assets/biped_wheel_leg.xml`：MuJoCo 机器人模型。
+- `config/smoke.yaml`：主参数文件。
+- `src/robot_smoke/`：仿真、控制、运动学等核心 Python 代码。
+- `docs/CONTROL_THEORY.md`：控制系统说明。
 
-默认使用 `py310` conda 环境：
+## 2. 第一次配置环境
+
+下面命令默认在 Windows PowerShell 中运行。项目路径假设为：
+
+```powershell
+E:\mujoco_py_lqr
+```
+
+### 2.1 安装 Miniconda
+
+安装 Miniconda 后重新打开 PowerShell，确认：
+
+```powershell
+conda --version
+```
+
+### 2.2 一键创建 py310 环境
+
+在 PowerShell 中执行：
+
+```powershell
+conda create -n py310 python=3.10 -y
+conda activate py310
+python -m pip install --upgrade pip
+pip install mujoco numpy pyyaml scipy matplotlib
+```
+
+如果安装 Python 包很慢，或者因为网络原因安装失败，可以临时使用清华源：
+
+```powershell
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple mujoco numpy pyyaml scipy matplotlib
+```
+
+如果希望当前环境以后默认使用清华源，可以执行：
+
+```powershell
+pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+### 2.3 检查 Python 路径
+
+本项目常用的 Python 路径是：
+
+```powershell
+E:\miniconda\envs\py310\python.exe
+```
+
+如果你的 Miniconda 装在别的位置，用下面命令查看当前环境 Python 路径：
+
+```powershell
+where python
+```
+
+如果 Miniconda 安装位置不同，把后续命令中的 `E:\miniconda\envs\py310\python.exe` 替换为实际路径。
+
+## 3. MuJoCo / OSMesa 常见问题
+
+### 3.1 有 viewer 窗口时不要使用 OSMesa
+
+如果之前跑过无显示/headless 仿真，环境变量 `MUJOCO_GL` 可能被设置成 `osmesa`。这会导致本地 viewer 不弹窗、窗口卡住，或者出现 OpenGL 相关错误。
+
+在每次打开 viewer 前，先执行：
 
 ```powershell
 Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py
 ```
 
-基础可视化：
+### 3.2 如果你看到 OSMesa / OpenGL 报错
+
+检查当前环境：
 
 ```powershell
 Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --visualize
+conda activate py310
+python -c "import mujoco; print(mujoco.__version__)"
 ```
 
-## 当前测试入口
+如果 `import mujoco` 失败，重新安装 MuJoCo：
 
-默认腿长来自 `config/smoke.yaml`，当前为 `0.24 m`；腿长调度表默认启用。`--visualize-seconds` 控制可视化运行时长。
+```powershell
+pip install --upgrade mujoco
+```
 
-### 平衡测试
+常见现象和处理方式：
+
+| 现象                       | 优先处理                                                           |
+| ------------------------ | -------------------------------------------------------------- |
+| viewer 不弹窗               | 先执行 `Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue`。 |
+| 报 `OSMesa` 或 OpenGL 相关错误 | 不要在本地 viewer 模式使用 `MUJOCO_GL=osmesa`。                          |
+| `import mujoco` 失败       | 在 `py310` 环境里重新执行 `pip install --upgrade mujoco`。              |
+| 命令里找不到 Python            | 用 `where python` 找到自己的 `python.exe`，替换命令里的路径。                  |
+
+## 4. 第一次运行检查
+
+进入项目目录：
+
+```powershell
+cd E:\mujoco_py_lqr
+```
+
+先确认脚本能显示帮助：
+
+```powershell
+python run_smoke.py --help
+```
+
+再跑一个不打开仿真画面的测试
+
+```powershell
+python run_smoke.py --virtual-rod-steps 10
+```
+
+正常结果示例：
+
+```text
+result: PASS finite model/load/step smoke
+```
+
+## 5. 第一次打开画面
+
+平衡可视化：
 
 ```powershell
 Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --lqr-true-equilibrium --visualize --visualize-seconds 10
+python run_smoke.py --lqr-true-equilibrium --visualize --visualize-seconds 10
 ```
 
-### 直线速度测试
+观察重点：
 
-```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --lqr-true-equilibrium --speed-profile low --visualize --visualize-seconds 10
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --lqr-true-equilibrium --speed-profile medium --visualize --visualize-seconds 10
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --lqr-true-equilibrium --speed-profile high --visualize --visualize-seconds 10
-```
+- 小车是否能站住。
+- 腿长是否大致保持在默认高度附近。
 
-### 平衡冲击测试
+## 6. 常用实验命令
 
-```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --lqr-true-equilibrium --impact small --visualize --visualize-seconds 10
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --lqr-true-equilibrium --impact medium --visualize --visualize-seconds 10
-```
+默认腿长来自 `config/smoke.yaml`，当前传承版默认值为 `0.24 m`。腿长调度表默认启用。
 
-### 原地旋转测试
-
-`--turn-speed` 可取 `low`、`medium`、`high`。当前约定为：
-
-- `low = pi/2 rad/s`
-- `medium = pi rad/s`
-- `high = 10 rad/s`
-
-```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --turn-test --turn-speed low --visualize --visualize-seconds 6
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --turn-test --turn-speed medium --visualize --visualize-seconds 6
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --turn-test --turn-speed high --visualize --visualize-seconds 6
-```
-
-### 变腿长高速旋转测试
-
-该测试会高速原地旋转，同时让腿长参考在 `minimum_leg_length..maximum_leg_length` 范围内做低频正弦跟踪。当前腿长周期为 `1.5 s`，自转和腿长变化同时开始、同时结束。
+### 6.1 平衡测试
 
 ```powershell
 Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --turn-length-sine-test --visualize --visualize-seconds 10 --roll-length-plot
+python run_smoke.py --lqr-true-equilibrium --visualize --visualize-seconds 10
 ```
 
-### 旋转前进测试
+### 6.2 直线速度测试
 
-`low` 表示低速前进加低速旋转；`high` 表示高速前进加中速旋转。
-
-```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --turn-drive-test low --visualize --visualize-seconds 10
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --turn-drive-test high --visualize --visualize-seconds 10
-```
-
-### Roll 坡道测试
-
-`--roll-test` 会注入专用临时坡道场地，普通测试不带这些坡。该入口用于观察文章 2.2 的双腿长度和横滚补偿通道。
+低速：
 
 ```powershell
 Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --roll-test --roll-length-plot --visualize --visualize-seconds 10
+python run_smoke.py --lqr-true-equilibrium --speed-profile low --visualize --visualize-seconds 10
 ```
 
-### 飞坡 / 离地检测测试
-
-该入口会注入全宽飞坡，并启用论文第 3 节离地检测。离地检测使用左右轮接触法向力；双轮法向力低于阈值后进入离地模式。
+中速：
 
 ```powershell
 Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --flight-test --visualize --visualize-seconds 10 --lqr-debug-plot
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --flight-test --flight-test-speed medium --visualize --visualize-seconds 10 --lqr-debug-plot
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --flight-test --flight-test-speed high --visualize --visualize-seconds 10 --lqr-debug-plot
+python run_smoke.py --lqr-true-equilibrium --speed-profile medium --visualize --visualize-seconds 10
 ```
 
-### 斜坡 ROLL 原地旋转测试
-
-该入口复用飞坡场地，但不启用离地检测。小车先中速前进到全宽斜坡上，随后停止速度参考并停 1 秒，再启动低速原地旋转，用于观察斜坡上 roll/腿长补偿和双腿协调。
+高速：
 
 ```powershell
 Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --slope-roll-turn-test --visualize --visualize-seconds 10 --lqr-debug-plot
+python run_smoke.py --lqr-true-equilibrium --speed-profile high --visualize --visualize-seconds 10
 ```
 
-如果停车开始时小车还没有到坡上，或已经越过坡面，可调整：
+### 6.3 平衡冲击测试
 
-```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --slope-roll-turn-test --slope-roll-turn-start-time 2.3 --visualize --visualize-seconds 10 --lqr-debug-plot
-```
-
-### 原地跳跃测试
-
-该入口用于诊断跳跃流程：默认工作点支撑，随后下蹲到最小腿长，再快速伸腿；离地检测和落地逻辑保持启用。
+小冲击：
 
 ```powershell
 Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --jump-test --visualize --visualize-seconds 10 --lqr-debug-plot
+python run_smoke.py --lqr-true-equilibrium --impact small --visualize --visualize-seconds 10
 ```
 
-### 前进跳跃测试
-
-该入口先执行指定速度档位的前进测试，只在匀速阶段且双腿世界竖直角满足触发条件时启动跳跃流程。
+中冲击：
 
 ```powershell
 Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --forward-jump-test low --visualize --visualize-seconds 10 --lqr-debug-plot
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --forward-jump-test medium --visualize --visualize-seconds 10 --lqr-debug-plot
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --forward-jump-test high --visualize --visualize-seconds 10 --lqr-debug-plot
+python run_smoke.py --lqr-true-equilibrium --impact medium --visualize --visualize-seconds 10
 ```
 
-## 绘图诊断接口
+### 6.4 原地旋转测试
 
-这些接口只用于调试，不默认开启。
+`--turn-speed` 可取 `low`、`medium`、`high`：
+
+```powershell
+Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
+python run_smoke.py --turn-test --turn-speed low --visualize --visualize-seconds 6
+```
+
+```powershell
+Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
+python run_smoke.py --turn-test --turn-speed medium --visualize --visualize-seconds 6
+```
+
+```powershell
+Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
+python run_smoke.py --turn-test --turn-speed high --visualize --visualize-seconds 6
+```
+
+### 6.5 变腿长高速旋转测试
+
+这个测试会高速原地旋转，同时让腿长参考在允许范围内做正弦变化：
+
+```powershell
+Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
+python run_smoke.py --turn-length-sine-test --visualize --visualize-seconds 10
+```
+
+### 6.6 Roll 坡道测试
+
+用于观察论文 2.2 的双腿长度控制和横滚补偿：
+
+```powershell
+Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
+python run_smoke.py --roll-test --visualize --visualize-seconds 10
+```
+
+### 6.7 飞坡 / 离地检测测试
+
+飞坡：
+
+```powershell
+Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
+python run_smoke.py --flight-test --flight-test-speed high --visualize --visualize-seconds 10
+```
+
+### 6.8 原地跳跃测试
+
+```powershell
+Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
+python run_smoke.py --jump-test --visualize --visualize-seconds 10
+```
+
+### 6.9 手动驾驶场景
+
+这个场景会一直运行到关闭 MuJoCo viewer。按键为：
+
+- 按住 `↑` / `↓`：前进 / 后退。
+- 按住 `←` / `→`：左旋 / 右旋。
+
+```powershell
+Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
+python run_smoke.py --manual-drive
+```
+
+## 7. 绘图诊断
+
+图片默认输出到 `output\HHMMSS.png`。
 
 转向 PD 图：
 
 ```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --turn-test --turn-speed high --visualize-seconds 6 --turn-pd-plot
+python run_smoke.py --turn-test --turn-speed high --visualize-seconds 6 --turn-pd-plot
 ```
 
 腿长 / Roll 图：
 
 ```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --lqr-true-equilibrium --visualize-seconds 10 --roll-length-plot
+python run_smoke.py --lqr-true-equilibrium --visualize-seconds 10 --roll-length-plot
 ```
 
 LQR 调试图：
 
 ```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_smoke.py --lqr-true-equilibrium --speed-profile high --visualize-seconds 10 --lqr-debug-plot
+python run_smoke.py --lqr-true-equilibrium --speed-profile high --visualize-seconds 10 --lqr-debug-plot
 ```
 
-图片默认输出到 `output\HHMMSS.png`。
+## 8. 后续阅读顺序
 
-## Residual RL / PPO 当前入口
+推荐阅读顺序：
 
-当前已有最小 residual RL 训练原型，但它仍服务于本地验证和服务器训练交接，不表示飞坡、跳跃或落地行为已经合格。
+1. 先跑 `README` 里的平衡测试。
+2. 再看 [docs/CONTROL_THEORY.md](docs/CONTROL_THEORY.md) 控制算法文档和原论文 [ref\j.cnki.xk.2023.2533.pdf](ref\j.cnki.xk.2023.2533.pdf) 的相关章节，理解 `theta/pitch/T/Tp`。
+3. 再跑速度测试和转向测试。
+4. 最后再看腿长、Roll 和离地检测。
 
-训练任务只保留 5 个 key：
 
-- `forward_jump_medium`
-- `forward_jump_high`
-- `flight_ramp_medium`
-- `flight_ramp_high`
-- `inplace_jump`
+## 9. 参数分组
 
-低速飞坡和低速带速度跳不作为 RL 训练任务，因为低速场景会先绊倒，不能提供有效起跳/落地样本。
+`config/smoke.yaml` 里的参数可以按用途理解，不用一上来全看完：
 
-Env smoke：
+- 运行与工作点：`leg_length`、`minimum_leg_length`、`maximum_leg_length`、`initial_leg_length`、`length_schedule`
+- 平衡工作点诊断：`equilibrium_*`
+- 腿长 PID 与前馈：`virtual_rod_length_*`
+- VMC 与整体平衡：`virtual_rod_theta_*`、`lqr_*`
+- 转向与双腿同步：`yaw_turn_*`、`leg_sync_*`
+- 横滚与腿高测试：`roll_reference`、`roll_force_kp`、`leg_height_*`
+- 飞坡与离地检测：`flight_*`
 
-```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_residual_env_smoke.py --task-key flight_ramp_medium --steps 3 --episode-seconds 10 --step-seconds 0.02
-```
+## 10. 结尾
 
-零残差对照：
-
-```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_residual_env_smoke.py --task-key flight_ramp_medium --compare-zero-residual --episode-seconds 10 --visualize-seconds 10 --step-seconds 0.02
-```
-
-本地单回合测速：
-
-```powershell
-Measure-Command { & 'E:\miniconda\envs\py310\python.exe' run_residual_env_smoke.py --task-key flight_ramp_medium --controller-mode lqr_residual --steps 500 --episode-seconds 10 --step-seconds 0.02 --action 0 0 0 0 0 | Out-Null }
-```
-
-短 PPO 连通性检查：
-
-```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_train_residual_ppo.py --tasks flight_ramp_medium --total-timesteps 500 --n-envs 1 --n-steps 500 --batch-size 250 --episode-sim-seconds 10 --step-seconds 0.02 --run-name local_single_episode_50hz_speed_check --device cpu
-```
-
-`--episode-sim-seconds 10` 是 MuJoCo 仿真时间，不能为了训练速度裁剪成 2 秒；训练加速应来自 headless、并行 Env 和降低 residual policy 推理频率。`--step-seconds 0.02` 表示 50 Hz residual policy 更新，MuJoCo 仍推进完整 10000 个 1 ms 物理步，底层 LQR/PID/VMC 默认保持每个 1 ms 物理步更新。若显式传参，使用 `--control-decimation-steps 1` 保持该语义。
-
-服务器并行训练建议：
-
-```bash
-python run_train_residual_ppo.py \
-  --tasks all \
-  --vec-env subproc \
-  --subproc-start-method forkserver \
-  --n-envs 5 \
-  --total-timesteps 1000000 \
-  --n-steps 500 \
-  --batch-size 1000 \
-  --episode-sim-seconds 10 \
-  --step-seconds 0.02 \
-  --control-decimation-steps 1 \
-  --checkpoint-freq 50000 \
-  --run-name residual_ppo_all_1m_50hz
-```
-
-训练后加载模型评估：
-
-```powershell
-& 'E:\miniconda\envs\py310\python.exe' run_residual_policy_eval.py --model runs\residual_ppo\residual_ppo_all_1m_50hz\models\final_model.zip --task-key flight_ramp_medium --episode-sim-seconds 10 --step-seconds 0.02 --control-decimation-steps 1 --print-every 25 --device cpu
-```
-
-本地打开 viewer 看动作：
-
-```powershell
-Remove-Item Env:MUJOCO_GL -ErrorAction SilentlyContinue
-& 'E:\miniconda\envs\py310\python.exe' run_residual_policy_eval.py --model runs\residual_ppo\residual_ppo_all_1m_50hz\models\final_model.zip --task-key flight_ramp_medium --episode-sim-seconds 10 --step-seconds 0.02 --control-decimation-steps 1 --visualize --viewer-sync-hz 30 --device cpu
-```
-
-## 脚本规则
-
-- 根目录 `.py` 只保留可直接运行入口。
-- 可复用代码放到 `src/robot_smoke/`。
-- 不保留无用临时脚本、日志、缓存、checkpoint 或大体积输出。
-- 实验过程和验证结果写入 `tasks/CONTROL_FRAMEWORK.md`。
-- 控制公式、稳定物理量定义和当前有效物理语义写入 `docs/CONTROL_THEORY.md`。
-- 涉及机器人动作的判断必须优先给出可视化命令，由 viewer 人工确认。
-
-## 训练交接状态
-
-当前已有最小 PPO/Env 入口，可以用于服务器并行训练前的连通性验证。仓库仍不是完整工程化训练平台：日志、checkpoint、tensorboard、wandb、临时输出和训练结果不进仓库；训练结果后续再下载到本地并转换为 ONNX 做 MuJoCo 可视化验证。
+本项目仅用于开源控制算法的简单验证，一些任务效果并未优化的很好，欢迎指出；
+如果对本项目有问题，欢迎交流询问，QQ：2470519590。
