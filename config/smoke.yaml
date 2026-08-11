@@ -1,4 +1,4 @@
-# 本文件是本地 MuJoCo smoke 的主配置。命令行参数优先级高于这里的值。
+# 本文件是仿真的主配置。
 # 默认单位：m、s、rad、N、N*m。
 # LQR 状态顺序：[theta, dtheta, x, dx, pitch, d_pitch]。
 # 其中 x/dx 默认来自模拟 wheel odometry，不是 base_x/base_x_dot。
@@ -92,20 +92,7 @@ lqr_x_outer_max_v: 0.35
 lqr_wheel_sign: 1.0
 lqr_pitch_sign: -1.0
 
-# 五、RL 控制器接口。
-# rl_controller_mode：
-#   lqr：纯原始 LQR 中层输出。
-#   lqr_residual：在原始 LQR 输出后叠加 residual RL 接口输出，再进入既有低通/斜率限幅。
-# 当前未加载训练策略，默认 residual 为 0；因此 residual 模式只用于接口 smoke。
-# residual 限幅默认为 0，后续接入策略前必须显式放开并记录任务语义。
-# leg_length residual 只作用于左右腿长参考，最后仍会被 minimum/maximum_leg_length 限幅。
-rl_controller_mode: lqr
-rl_residual_t_limit: 0.0
-rl_residual_tp_limit: 0.0
-rl_residual_length_force_limit: 0.0
-rl_residual_leg_length_limit: 0.0
-
-# 六、原地转向与双腿同步。
+# 五、原地转向与双腿同步。
 # yaw_turn_*：期望 yaw 角速度到左右轮差速力矩的 PD。
 # leg_sync_*：左右虚拟腿竖直角差到左右相反 Tp 偏置的 PD。
 # input_lowpass：原始测量量低通。

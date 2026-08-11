@@ -1,4 +1,4 @@
-﻿"""True-equilibrium search helpers."""
+"""真实平衡点搜索辅助函数。"""
 
 from __future__ import annotations
 

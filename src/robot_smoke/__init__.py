@@ -1,2 +1,2 @@
-"""Local smoke checks for MuJoCo robot physical semantics."""
+"""MuJoCo 机器人物理语义的本地 smoke 检查包。"""
 

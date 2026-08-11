@@ -1,4 +1,4 @@
-﻿"""Virtual-leg IK target helpers."""
+"""虚拟腿 IK 目标辅助函数。"""
 
 from __future__ import annotations
 

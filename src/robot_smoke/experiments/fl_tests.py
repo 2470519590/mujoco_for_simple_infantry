@@ -1,4 +1,4 @@
-﻿"""F_l channel diagnostic tests."""
+"""沿腿推力 F_l 通道诊断测试。"""
 
 from __future__ import annotations
 

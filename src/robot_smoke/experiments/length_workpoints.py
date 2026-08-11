@@ -1,8 +1,7 @@
-"""Offline leg-length workpoint diagnostics.
+"""离线腿长工作点诊断。
 
-This module builds a table of frozen-length local quantities without touching
-the runtime balance controller.  MuJoCo is used only to load XML parameters and
-to evaluate the authored five-bar geometry after analytic IK.
+本模块在不改变运行时平衡控制器的前提下，生成固定腿长下的局部量表。
+MuJoCo 只用于加载 XML 参数，并在解析 IK 后评估已建模的五连杆几何。
 """
 
 from __future__ import annotations

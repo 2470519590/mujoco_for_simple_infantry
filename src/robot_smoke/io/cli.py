@@ -1,7 +1,7 @@
-﻿"""Thin command-line interface for the smoke runner.
+"""smoke runner 的轻量命令行接口。
 
-Only stable user-facing switches are exposed here. Diagnostic and tuning
-values are locked as internal defaults so the main smoke path stays readable.
+这里只暴露稳定的用户可见开关。诊断和调参量尽量锁在内部默认值中，
+保持主 smoke 路径可读。
 """
 
 from __future__ import annotations
@@ -26,98 +26,48 @@ from ..core.constants import (
     LOCKED_EQUILIBRIUM_WHEEL_COM_KP,
     LOCKED_EQUILIBRIUM_WHEEL_DAMPING,
 )
-from ..control.rl_interface import RL_CONTROLLER_MODES
+
+HIDDEN = argparse.SUPPRESS
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="MuJoCo wheel-leg smoke runner.")
-    parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
-    parser.add_argument("--visualize", action="store_true")
-    parser.add_argument("--visualize-seconds", type=float)
-    parser.add_argument("--virtual-rod-steps", type=int, default=800)
-    parser.add_argument(
-        "--length-schedule",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="enable/disable length-scheduled K/F_l0 table",
-    )
-    parser.add_argument("--length-schedule-path", type=Path)
-    parser.add_argument("--initial-leg-length", type=float, help="initial commanded leg length for scheduled tests")
-    parser.add_argument("--startup-ramp-seconds", type=float, help="seconds reserved for initial leg-length ramp")
-    parser.add_argument(
-        "--leg-length",
-        type=float,
-        default=LOCKED_EQUILIBRIUM_L0,
-        help="fixed leg-length slice; equilibrium and LQR are rebuilt for this value",
-    )
-    parser.add_argument(
-        "--lqr-true-equilibrium",
-        action="store_true",
-        help="run the YAML-backed LQR/VMC entry; with schedule disabled this falls back to the locked 0.35 m diagnostic point",
-    )
-    parser.add_argument(
-        "--wheel-balance-only",
-        action="store_true",
-        help="diagnostic mode: disable all leg actuator control and Tp; keep wheel T only",
-    )
-    parser.add_argument("--diagnostics-only", action="store_true")
-    parser.add_argument("--no-realtime", action="store_true")
-    parser.add_argument(
-        "--impact",
-        dest="impact_level",
-        choices=("small", "medium"),
-        help="apply one fixed horizontal base impact",
-    )
-    parser.add_argument("--speed-profile", choices=("low", "medium", "high"))
-    parser.add_argument("--turn", dest="turn_direction", choices=("left", "right"))
-    parser.add_argument("--turn-speed", choices=("low", "medium", "high"), default="high")
-    parser.add_argument("--turn-test", action="store_true")
-    parser.add_argument("--turn-length-sine-test", action="store_true", help="高速原地旋转，同时腿长在允许范围内做正弦跟踪")
-    parser.add_argument("--turn-drive-test", choices=("low", "high"))
-    parser.add_argument("--roll-test", action="store_true", help="中速依次通过左、右单轮三角坡")
-    parser.add_argument("--flight-test", action="store_true", help="高速全宽飞坡，并启用论文第 3 节离地检测")
-    parser.add_argument("--flight-test-speed", choices=("low", "medium", "high"), help="飞坡入口的前进速度档位")
-    parser.add_argument("--slope-roll-turn-test", action="store_true", help="复用飞坡场地：先中速前进到坡上，再中速原地旋转")
-    parser.add_argument("--slope-roll-turn-start-time", type=float, help="斜坡 ROLL 原地旋转开始时间，单位 s")
-    parser.add_argument("--jump-test", action="store_true", help="原地跳跃：腿长从最小值瞬间拉到最大值，并保留离地检测")
-    parser.add_argument(
-        "--forward-jump-test",
-        choices=("low", "medium", "high"),
-        help="前进匀速阶段触发跳跃；触发条件为双腿世界竖直角均小于 3 度",
-    )
-    parser.add_argument("--turn-pd-plot", action="store_true")
-    parser.add_argument("--roll-length-plot", action="store_true")
-    parser.add_argument("--lqr-debug-plot", action="store_true")
-    parser.add_argument(
-        "--leg-height-test",
-        action="store_true",
-        help="平衡模式下按低/中/高三档切换腿长目标，不重新搜索工作点",
-    )
-    parser.add_argument("--length-kd", type=float, help="覆盖腿长微分增益")
-    parser.add_argument("--length-ki", type=float, help="覆盖腿长积分增益")
-    parser.add_argument("--length-integral-limit", type=float, help="覆盖腿长积分状态限幅")
-    parser.add_argument("--length-force-ff", type=float, help="覆盖每腿沿虚拟腿前馈支撑力，单位 N")
-    parser.add_argument("--yaw-turn-kp", type=float)
-    parser.add_argument("--yaw-turn-kd", type=float)
-    parser.add_argument("--leg-sync-kp", type=float)
-    parser.add_argument("--leg-sync-kd", type=float)
-    parser.add_argument(
-        "--rl-controller-mode",
-        choices=RL_CONTROLLER_MODES,
-        help="middle-layer controller interface: pure LQR or LQR plus bounded residual RL",
-    )
-    parser.add_argument("--rl-residual-t-limit", type=float, help="absolute residual limit for common wheel torque T")
-    parser.add_argument("--rl-residual-tp-limit", type=float, help="absolute residual limit for virtual-leg pitch torque Tp")
-    parser.add_argument(
-        "--rl-residual-length-force-limit",
-        type=float,
-        help="absolute residual limit for common along-leg force delta",
-    )
-    parser.add_argument(
-        "--rl-residual-leg-length-limit",
-        type=float,
-        help="absolute residual limit for left/right leg-length reference deltas",
-    )
+    parser = argparse.ArgumentParser(description="MuJoCo 轮腿机器人仿真入口。")
+    parser.add_argument("--visualize", action="store_true", help="显示仿真窗口")
+    parser.add_argument("--visualize-seconds", type=float, help="可视化时长（秒）")
+    parser.add_argument("--impact", dest="impact_level", choices=("small", "medium"), help="外部冲击档位")
+    parser.add_argument("--speed-profile", choices=("low", "medium", "high"), help="前进速度档位")
+    parser.add_argument("--turn", dest="turn_direction", choices=("left", "right"), help="转向方向")
+    parser.add_argument("--turn-speed", choices=("low", "medium", "high"), default="high", help="转向速度档位")
+    parser.add_argument("--turn-test", action="store_true", help="原地转向测试")
+    parser.add_argument("--turn-length-sine-test", action="store_true", help="转向同时做腿长正弦跟踪")
+    parser.add_argument("--roll-test", action="store_true", help="坡道横滚测试")
+    parser.add_argument("--flight-test", action="store_true", help="飞坡离地测试")
+    parser.add_argument("--flight-test-speed", choices=("low", "medium", "high"), help="飞坡入口速度档位")
+    parser.add_argument("--jump-test", action="store_true", help="原地跳跃测试")
+    parser.add_argument("--manual-drive", action="store_true", help="键盘手动驾驶场景")
+    parser.add_argument("--lqr-true-equilibrium", action="store_true", help="平衡测试")
+    parser.add_argument("--turn-pd-plot", action="store_true", help=HIDDEN)
+    parser.add_argument("--roll-length-plot", action="store_true", help=HIDDEN)
+    parser.add_argument("--lqr-debug-plot", action="store_true", help=HIDDEN)
+    parser.add_argument("--model", type=Path, default=DEFAULT_MODEL, help=HIDDEN)
+    parser.add_argument("--virtual-rod-steps", type=int, default=800, help=HIDDEN)
+    parser.add_argument("--length-schedule", action=argparse.BooleanOptionalAction, default=None, help=HIDDEN)
+    parser.add_argument("--length-schedule-path", type=Path, help=HIDDEN)
+    parser.add_argument("--initial-leg-length", type=float, help=HIDDEN)
+    parser.add_argument("--startup-ramp-seconds", type=float, help=HIDDEN)
+    parser.add_argument("--leg-length", type=float, default=LOCKED_EQUILIBRIUM_L0, help=HIDDEN)
+    parser.add_argument("--wheel-balance-only", action="store_true", help=HIDDEN)
+    parser.add_argument("--diagnostics-only", action="store_true", help=HIDDEN)
+    parser.add_argument("--no-realtime", action="store_true", help=HIDDEN)
+    parser.add_argument("--leg-height-test", action="store_true", help=HIDDEN)
+    parser.add_argument("--length-kd", type=float, help=HIDDEN)
+    parser.add_argument("--length-ki", type=float, help=HIDDEN)
+    parser.add_argument("--length-integral-limit", type=float, help=HIDDEN)
+    parser.add_argument("--length-force-ff", type=float, help=HIDDEN)
+    parser.add_argument("--yaw-turn-kp", type=float, help=HIDDEN)
+    parser.add_argument("--yaw-turn-kd", type=float, help=HIDDEN)
+    parser.add_argument("--leg-sync-kp", type=float, help=HIDDEN)
+    parser.add_argument("--leg-sync-kd", type=float, help=HIDDEN)
 
     parser.set_defaults(
         zero_steps=200,
@@ -235,16 +185,13 @@ def build_parser() -> argparse.ArgumentParser:
         turn_direction=None,
         turn_test=False,
         turn_length_sine_test=False,
-        turn_drive_test=None,
         leg_length_sine_test=False,
         leg_length_sine_period=1.5,
         roll_test=False,
         flight_test=False,
         flight_test_speed="high",
-        slope_roll_turn_test=False,
-        slope_roll_turn_start_time=2.3,
         jump_test=False,
-        forward_jump_test=None,
+        manual_drive=False,
         flight_detection_enabled=False,
         flight_airborne_force_threshold=20.0,
         flight_airborne_confirm_seconds=0.05,
@@ -259,10 +206,5 @@ def build_parser() -> argparse.ArgumentParser:
         length_ki=None,
         length_integral_limit=None,
         length_force_ff=None,
-        rl_controller_mode="lqr",
-        rl_residual_t_limit=0.0,
-        rl_residual_tp_limit=0.0,
-        rl_residual_length_force_limit=0.0,
-        rl_residual_leg_length_limit=0.0,
     )
     return parser

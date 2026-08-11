@@ -1,4 +1,4 @@
-"""Closed-form motion references for local wheel-leg smoke tests."""
+"""本地轮腿 smoke 测试使用的解析运动参考。"""
 
 from __future__ import annotations
 

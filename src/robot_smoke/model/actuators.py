@@ -1,4 +1,4 @@
-﻿"""Actuator and torque mapping helpers for the MuJoCo smoke scripts."""
+"""MuJoCo smoke 脚本使用的执行器与力矩映射辅助函数。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Whole-body command composition used by the article-style controller."""
+"""按论文控制器使用的整车虚拟控制指令组合。"""
 
 from __future__ import annotations
 

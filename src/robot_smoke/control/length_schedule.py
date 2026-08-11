@@ -1,4 +1,4 @@
-"""Leg-length scheduled LQR and support-feedforward table."""
+"""腿长调度 LQR 与支撑前馈表。"""
 
 from __future__ import annotations
 

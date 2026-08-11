@@ -1,4 +1,4 @@
-"""Runtime kinematic measurements from MuJoCo state."""
+"""从 MuJoCo 状态读取运行时运动学测量量。"""
 
 from __future__ import annotations
 

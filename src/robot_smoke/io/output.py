@@ -1,4 +1,4 @@
-"""Turn-controller plot output."""
+"""转向控制器绘图输出。"""
 
 from __future__ import annotations
 

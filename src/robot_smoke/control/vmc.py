@@ -1,4 +1,4 @@
-﻿"""Virtual model control and leg task-space mapping."""
+"""虚拟模型控制与腿部任务空间映射。"""
 
 from __future__ import annotations
 

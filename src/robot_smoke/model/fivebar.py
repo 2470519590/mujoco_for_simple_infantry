@@ -1,4 +1,4 @@
-﻿"""Analytic five-bar leg kinematics helpers."""
+"""五连杆腿部解析运动学辅助函数。"""
 
 from __future__ import annotations
 

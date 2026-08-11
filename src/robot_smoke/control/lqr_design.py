@@ -1,4 +1,4 @@
-"""Local LQR operating-point preparation and finite-difference design."""
+"""本地 LQR 工作点准备与有限差分设计工具。"""
 
 from __future__ import annotations
 

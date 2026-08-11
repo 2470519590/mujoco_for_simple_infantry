@@ -1,4 +1,4 @@
-"""Locked-base direct virtual-leg angular-torque experiment."""
+"""锁定基座的虚拟腿角力矩直接实验。"""
 
 from __future__ import annotations
 

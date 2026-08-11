@@ -1,4 +1,4 @@
-"""Article-style roll reference and differential support-force compensation."""
+"""按论文结构实现的横滚参考与左右支撑力差动补偿。"""
 
 from __future__ import annotations
 
